@@ -1,0 +1,131 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "AVENQRA REST API Documentation",
+    "description": "Comprehensive RESTful API specs for AVENQRA Civic Complaint & Infrastructure Resolution System",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new User (Citizen or Officer)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "example": "John Citizen" },
+                  "email": { "type": "string", "example": "john@avenqra.gov" },
+                  "password": { "type": "string", "example": "Password123!" },
+                  "phone": { "type": "string", "example": "+15550192834" },
+                  "role": { "type": "string", "example": "CITIZEN" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User registered successfully, OTP sent" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login User & Get JWT Token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "example": "john@avenqra.gov" },
+                  "password": { "type": "string", "example": "Password123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login successful with JWT token" }
+        }
+      }
+    },
+    "/complaints": {
+      "get": {
+        "summary": "List Complaints with Status & Category Filters",
+        "responses": {
+          "200": { "description": "Complaints list returned" }
+        }
+      },
+      "post": {
+        "summary": "Submit a New Geotagged Complaint",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "category": { "type": "string" },
+                  "latitude": { "type": "number" },
+                  "longitude": { "type": "number" },
+                  "address": { "type": "string" },
+                  "media": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Complaint created and ticket generated" }
+        }
+      }
+    },
+    "/departments": {
+      "get": {
+        "summary": "List Municipal Departments",
+        "responses": {
+          "200": { "description": "Departments list returned" }
+        }
+      },
+      "post": {
+        "summary": "Create Municipal Department (Admin)",
+        "responses": {
+          "201": { "description": "Department created" }
+        }
+      }
+    },
+    "/assignments": {
+      "post": {
+        "summary": "Dispatch Field Officer to Complaint (Admin)",
+        "responses": {
+          "201": { "description": "Officer assigned to complaint" }
+        }
+      }
+    }
+  }
+}

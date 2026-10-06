@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  OFFICER
+  DEPARTMENT_ADMIN
+  SUPER_ADMIN
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id               String            @id @default(uuid())
+  name             String
+  email            String            @unique
+  password         String
+  phone            String?
+  role             Role              @default(CITIZEN)
+  avatarUrl        String?
+  googleId         String?           @unique
+  otpCode          String?
+  otpExpiresAt     DateTime?
+  isVerified       Boolean           @default(false)
+  citizenProfile   Citizen?
+  officerProfile   Officer?
+  statusLogs       ComplaintStatusLog[]
+  assignedByMe     Assignment[]      @relation("AdminAssignments")
+  notifications    Notification[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@map("users")
+}
+
+model Citizen {
+  id               String            @id @default(uuid())
+  userId           String            @unique
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address          String?
+  totalComplaints  Int               @default(0)
+  complaints       Complaint[]
+  feedbacks        Feedback[]
+
+  @@map("citizens")
+}
+
+model Department {
+  id               String            @id @default(uuid())
+  name             String            @unique
+  code             String            @unique
+  slaHours         Int               @default(48)
+  officers         Officer[]
+  complaints       Complaint[]
+  createdAt        DateTime          @default(now())
+
+  @@map("departments")
+}
+
+model Officer {
+  id               String            @id @default(uuid())
+  userId           String            @unique
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departmentId     String?
+  department       Department?       @relation(fields: [departmentId], references: [id])
+  badgeNumber      String            @unique
+  status           String            @default("ACTIVE")
+  assignments      Assignment[]
+
+  @@map("officers")
+}
+
+model Complaint {
+  id               String            @id @default(uuid())
+  ticketNumber     String            @unique
+  citizenId        String
+  citizen          Citizen           @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  departmentId     String?
+  department       Department?       @relation(fields: [departmentId], references: [id])
+  title            String
+  description      String
+  category         String
+  currentStatus    ComplaintStatus   @default(SUBMITTED)
+  priority         Priority          @default(MEDIUM)
+  images           ComplaintImage[]
+  location         Location?
+  aiAnalysis       AIAnalysis?
+  statusLogs       ComplaintStatusLog[]
+  assignments      Assignment[]
+  feedback         Feedback?
+  createdAt        DateTime          @default(now())
+
+  @@map("complaints")
+}
+
+model ComplaintImage {
+  id               String            @id @default(uuid())
+  complaintId      String
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  imageUrl         String
+  imageType        String            @default("INITIAL")
+  uploadedAt       DateTime          @default(now())
+
+  @@map("complaint_images")
+}
+
+model Location {
+  id               String            @id @default(uuid())
+  complaintId      String            @unique
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  latitude         Float
+  longitude        Float
+  addressFormatted String?
+
+  @@map("locations")
+}
+
+model AIAnalysis {
+  id               String            @id @default(uuid())
+  complaintId      String            @unique
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  predictedCategory String
+  confidenceScore  Float
+  severityScore    Float
+  isDuplicate      Boolean           @default(false)
+
+  @@map("ai_analysis")
+}
+
+model ComplaintStatusLog {
+  id               String            @id @default(uuid())
+  complaintId      String
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  status           ComplaintStatus
+  remarks          String?
+  updatedById      String?
+  updatedBy        User?             @relation(fields: [updatedById], references: [id])
+  changedAt        DateTime          @default(now())
+
+  @@map("complaint_status")
+}
+
+model Assignment {
+  id               String            @id @default(uuid())
+  complaintId      String
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  officerId        String
+  officer          Officer           @relation(fields: [officerId], references: [id], onDelete: Cascade)
+  assignedById     String?
+  assignedBy       User?             @relation("AdminAssignments", fields: [assignedById], references: [id])
+  assignedAt       DateTime          @default(now())
+  completedAt      DateTime?
+
+  @@map("assignments")
+}
+
+model Notification {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  message          String
+  isRead           Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+
+  @@map("notifications")
+}
+
+model Feedback {
+  id               String            @id @default(uuid())
+  complaintId      String            @unique
+  complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  citizenId        String
+  citizen          Citizen           @relation(fields: [citizenId], references: [id], onDelete: Cascade)
+  rating           Int
+  comments         String?
+  createdAt        DateTime          @default(now())
+
+  @@map("feedback")
+}

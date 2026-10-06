@@ -1,0 +1,26 @@
+name: avenqra_mobile
+description: AVENQRA Mobile App for Citizen Complaint Reporting and Field Officer Management
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.0
+  geolocator: ^11.0.0
+  camera: ^0.10.5+9
+  flutter_secure_storage: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

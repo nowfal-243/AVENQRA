@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: avenqra_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: avenqra_user
+      POSTGRES_PASSWORD: avenqra_password
+      POSTGRES_DB: avenqra_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: avenqra_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: development
+      DATABASE_URL: postgresql://avenqra_user:avenqra_password@postgres:5432/avenqra_db?schema=public
+      JWT_SECRET: supersecret_jwt_key_avenqra_2026
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      - postgres
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: avenqra_ai_service
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      ENV: development
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: avenqra_web
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
