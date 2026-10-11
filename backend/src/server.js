@@ -1,5 +1,6 @@
 const app = require('./app');
 const dotenv = require('dotenv');
+const EscalationJob = require('./jobs/escalation.job');
 
 dotenv.config();
 
@@ -7,4 +8,7 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`🚀 AVENQRA Backend API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  
+  // Boot 30-Minute SLA Escalation Monitor
+  EscalationJob.init();
 });

@@ -3,6 +3,8 @@ import math
 import numpy as np
 from PIL import Image
 
+from app.services import taxonomy
+
 try:
     import cv2
     HAS_CV2 = True
@@ -18,7 +20,10 @@ try:
 except ImportError:
     HAS_TORCH = False
 
-CIVIC_CATEGORIES = ["POTHOLE", "WASTE", "WATER_LEAK", "STREETLIGHT", "ROAD_DAMAGE", "OTHER"]
+# Internal vision categories. These are legacy short codes; the taxonomy maps
+# them onto the canonical user-facing labels used across the platform.
+CIVIC_CATEGORIES = list(taxonomy.LEGACY_CODE_TO_LABEL.keys())
+
 
 class VisionClassifier:
     def __init__(self):

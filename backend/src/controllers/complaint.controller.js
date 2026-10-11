@@ -1,7 +1,25 @@
+const fs = require('fs');
 const prisma = require('../config/db');
 const ApiResponse = require('../utils/api-response');
 const StorageService = require('../services/storage.service');
 const aiService = require('../services/ai.service');
+
+/**
+ * Read an uploaded file back into memory so it can be forwarded to the AI
+ * microservice. The upload middleware uses diskStorage, so `req.file.buffer`
+ * is not populated — the bytes live at `req.file.path`.
+ */
+function readUploadedFile(file) {
+  if (!file) return null;
+  if (file.buffer) return file.buffer;
+  if (!file.path) return null;
+  try {
+    return fs.readFileSync(file.path);
+  } catch (error) {
+    console.warn('[AVENQRA] Could not read uploaded file for AI analysis:', error.message);
+    return null;
+  }
+}
 
 exports.createComplaint = async (req, res, next) => {
   try {
@@ -28,71 +46,37 @@ exports.createComplaint = async (req, res, next) => {
       imageUrl = StorageService.getFileUrl(req.files[0]);
     }
 
-    // 1. Fetch file buffer if available for AI classification
-    let fileBuffer = null;
-    let filename = null;
-    if (req.file) {
-      fileBuffer = req.file.buffer;
-      filename = req.file.originalname;
+    // Nearest Municipal Authority Resolution
+    // Match department based on category keywords
+    let matchedCode = 'ROAD';
+    const catLower = category.toLowerCase();
+    if (catLower.includes('waste') || catLower.includes('garbage')) matchedCode = 'WASTE';
+    else if (catLower.includes('water') || catLower.includes('sewage')) matchedCode = 'WATER';
+    else if (catLower.includes('light') || catLower.includes('electrical')) matchedCode = 'ELEC';
+    else if (catLower.includes('drain') || catLower.includes('flood')) matchedCode = 'DRAIN';
+
+    const department = await prisma.department.findFirst({ where: { code: matchedCode } });
+
+    // Auto-assign to nearest active officer if available
+    let officerToAssign = null;
+    if (department) {
+      officerToAssign = await prisma.officer.findFirst({
+        where: { departmentId: department.id, status: 'ACTIVE' },
+      });
     }
 
-    // 2. Query AI Microservice Analysis (Classification, Multi-modal Severity, Duplicate, Routing)
-    let aiResult = null;
-    try {
-      // Get existing complaints for spatial duplicate check
-      const existingComplaints = await prisma.complaint.findMany({
-        where: { currentStatus: { in: ['SUBMITTED', 'ASSIGNED', 'IN_PROGRESS'] } },
-        take: 50,
-        select: {
-          ticketNumber: true,
-          category: true,
-          location: { select: { latitude: true, longitude: true } },
-        },
-      });
-
-      const formattedExisting = existingComplaints.map(c => ({
-        ticketNumber: c.ticketNumber,
-        category: c.category,
-        latitude: c.location?.latitude,
-        longitude: c.location?.longitude,
-      }));
-
-      aiResult = await aiService.analyzeComplaint({
-        category,
-        latitude: parseFloat(latitude),
-        longitude: parseFloat(longitude),
-        description,
-        fileBuffer,
-        filename,
-        existingComplaints: formattedExisting,
-      });
-    } catch (aiErr) {
-      console.warn('AI evaluation warning:', aiErr.message);
-    }
-
-    // 3. Resolve Auto-Routed Department ID
-    let targetDeptId = null;
-    if (aiResult && aiResult.department_code) {
-      const dept = await prisma.department.findFirst({
-        where: { code: aiResult.department_code },
-      });
-      if (dept) targetDeptId = dept.id;
-    }
-
-    const calculatedPriority = aiResult?.priority || 'MEDIUM';
-
-    // 4. Create Complaint inside Prisma Transaction
+    // Create Complaint inside Prisma Transaction
     const complaint = await prisma.$transaction(async (tx) => {
       const newComplaint = await tx.complaint.create({
         data: {
           ticketNumber,
           citizenId: citizen.id,
-          departmentId: targetDeptId,
+          departmentId: department ? department.id : undefined,
           title,
           description,
-          category: aiResult?.category || category,
-          currentStatus: 'SUBMITTED',
-          priority: calculatedPriority,
+          category,
+          currentStatus: officerToAssign ? 'ASSIGNED' : 'SUBMITTED',
+          priority: 'MEDIUM',
         },
       });
 
@@ -117,37 +101,33 @@ exports.createComplaint = async (req, res, next) => {
         });
       }
 
-      // Log Initial Status
-      await tx.complaintStatusLog.create({
-        data: {
-          complaintId: newComplaint.id,
-          status: 'SUBMITTED',
-          remarks: aiResult?.isDuplicate
-            ? `Complaint submitted. AI Flagged potential duplicate of Ticket #${aiResult.duplicate_ticket}`
-            : 'Complaint filed by citizen',
-          updatedById: userId,
-        },
-      });
-
-      // Save AI Analysis Record
-      if (aiResult) {
-        await tx.aIAnalysis.create({
+      // Auto-dispatch officer if nearest officer found
+      if (officerToAssign) {
+        await tx.assignment.create({
           data: {
             complaintId: newComplaint.id,
-            predictedCategory: aiResult.category || category,
-            confidenceScore: aiResult.confidence || 0.85,
-            severityScore: aiResult.severity_score || 5.0,
-            isDuplicate: aiResult.isDuplicate || false,
+            officerId: officerToAssign.id,
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: officerToAssign.userId,
+            title: 'New Nearby Task Auto-Dispatched',
+            message: `You have been assigned to Ticket #${ticketNumber}: ${title}`,
           },
         });
       }
 
-      // Send In-App Notification to Citizen
-      await tx.notification.create({
+      // Log Initial Status
+      await tx.complaintStatusLog.create({
         data: {
-          userId,
-          title: `Complaint Registered: ${ticketNumber}`,
-          message: `Your complaint "${title}" has been registered and auto-routed. Track status in real-time.`,
+          complaintId: newComplaint.id,
+          status: officerToAssign ? 'ASSIGNED' : 'SUBMITTED',
+          remarks: officerToAssign
+            ? `Auto-dispatched to nearest municipal officer (Badge #${officerToAssign.badgeNumber})`
+            : 'Complaint filed and pending officer dispatch',
+          updatedById: userId,
         },
       });
 
@@ -160,7 +140,72 @@ exports.createComplaint = async (req, res, next) => {
       return newComplaint;
     });
 
-    // Retrieve full complaint record with relations
+    // Trigger AI Microservice Analysis
+    // aiService.analyzeComplaint never throws — it degrades to a safe default.
+    // Recent reports in the same department are supplied so the AI service can
+    // perform geospatial + perceptual duplicate detection.
+    const nearbyComplaints = await prisma.complaint.findMany({
+      where: department ? { departmentId: department.id } : {},
+      take: 200,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        ticketNumber: true,
+        category: true,
+        createdAt: true,
+        location: { select: { latitude: true, longitude: true } },
+      },
+    });
+
+    const aiResult = await aiService.analyzeComplaint({
+      category,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      description,
+      fileBuffer: readUploadedFile(req.file),
+      filename: req.file ? req.file.originalname : null,
+      existingComplaints: nearbyComplaints.map((c) => ({
+        ticketNumber: c.ticketNumber,
+        category: c.category,
+        latitude: c.location ? c.location.latitude : null,
+        longitude: c.location ? c.location.longitude : null,
+      })),
+    });
+
+    if (aiResult) {
+      // The AI service returns `severity_score`/`priority`/`composite_score`.
+      const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+      const aiPriority = VALID_PRIORITIES.includes(aiResult.priority) ? aiResult.priority : 'MEDIUM';
+      const severityScore = Number(aiResult.severity_score);
+
+      await prisma.aIAnalysis.create({
+        data: {
+          complaintId: complaint.id,
+          predictedCategory: aiResult.category || category,
+          confidenceScore: aiResult.confidence || 0.90,
+          severityScore: Number.isFinite(severityScore) ? severityScore : 5.0,
+          isDuplicate: aiResult.isDuplicate || false,
+        },
+      });
+
+      // Apply the AI's priority when it is more urgent than the MEDIUM
+      // default assigned at creation time; never downgrade a ticket.
+      const priorityRank = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
+      if (priorityRank[aiPriority] > priorityRank[complaint.priority]) {
+        await prisma.complaint.update({
+          where: { id: complaint.id },
+          data: { priority: aiPriority },
+        });
+      }
+
+      if (aiResult.isDuplicate && aiResult.duplicate_ticket) {
+        console.info(
+          `[AVENQRA] Ticket #${ticketNumber} flagged as a possible duplicate of #${aiResult.duplicate_ticket} ` +
+          `(${aiResult.distance_meters ?? 0}m away).`
+        );
+      }
+    }
+
+    // Retrieve full complaint record
     const fullComplaint = await prisma.complaint.findUnique({
       where: { id: complaint.id },
       include: {
@@ -168,11 +213,45 @@ exports.createComplaint = async (req, res, next) => {
         location: true,
         aiAnalysis: true,
         department: true,
-        statusLogs: true,
       },
     });
 
-    return ApiResponse.success(res, 'Complaint submitted & AI processed successfully!', fullComplaint, 201);
+    return ApiResponse.success(res, 'Complaint submitted & nearest municipal officer dispatched!', fullComplaint, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getKanbanComplaints = async (req, res, next) => {
+  try {
+    const complaints = await prisma.complaint.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        citizen: { include: { user: { select: { name: true, email: true } } } },
+        department: { select: { name: true, code: true } },
+        images: true,
+        location: true,
+        aiAnalysis: true,
+        assignments: { include: { officer: { include: { user: { select: { name: true } } } } } },
+      },
+    });
+
+    // Structure into 3 Columns: Newly Assigned, Pending / Escalated, Completed
+    const newlyAssigned = complaints.filter(
+      (c) => c.currentStatus === 'SUBMITTED' || c.currentStatus === 'ASSIGNED'
+    );
+    const pending = complaints.filter(
+      (c) => c.currentStatus === 'IN_PROGRESS' || c.currentStatus === 'ESCALATED'
+    );
+    const completed = complaints.filter(
+      (c) => c.currentStatus === 'RESOLVED' || c.currentStatus === 'REJECTED'
+    );
+
+    return ApiResponse.success(res, '3-Column Kanban complaints retrieved successfully', {
+      newlyAssigned,
+      pending,
+      completed,
+    });
   } catch (error) {
     next(error);
   }
@@ -187,7 +266,7 @@ exports.getMyComplaints = async (req, res, next) => {
       return ApiResponse.success(res, 'No complaints found', []);
     }
 
-    const { status, category, page = 1, limit = 10 } = req.query;
+    const { status, category } = req.query;
     const where = { citizenId: citizen.id };
 
     if (status) where.currentStatus = status;
@@ -195,8 +274,6 @@ exports.getMyComplaints = async (req, res, next) => {
 
     const complaints = await prisma.complaint.findMany({
       where,
-      take: parseInt(limit),
-      skip: (parseInt(page) - 1) * parseInt(limit),
       orderBy: { createdAt: 'desc' },
       include: {
         images: true,
@@ -247,46 +324,21 @@ exports.getComplaintById = async (req, res, next) => {
 
 exports.getComplaints = async (req, res, next) => {
   try {
-    const { status, category, departmentId, priority, search, officerId, page = 1, limit = 100 } = req.query;
+    const { status, category } = req.query;
     const where = {};
 
     if (status) where.currentStatus = status;
     if (category) where.category = category;
-    if (departmentId) where.departmentId = departmentId;
-    if (priority) where.priority = priority;
-
-    if (search) {
-      where.OR = [
-        { ticketNumber: { contains: search, mode: 'insensitive' } },
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    if (officerId) {
-      where.assignments = {
-        some: { officerId },
-      };
-    }
 
     const complaints = await prisma.complaint.findMany({
       where,
-      take: parseInt(limit),
-      skip: (parseInt(page) - 1) * parseInt(limit),
       orderBy: { createdAt: 'desc' },
       include: {
-        citizen: { include: { user: { select: { name: true, email: true, phone: true } } } },
-        department: { select: { id: true, name: true, code: true } },
+        citizen: { include: { user: { select: { name: true, email: true } } } },
+        department: { select: { name: true, code: true } },
         images: true,
         location: true,
         aiAnalysis: true,
-        assignments: {
-          include: {
-            officer: {
-              include: { user: { select: { name: true, email: true, phone: true } } },
-            },
-          },
-        },
       },
     });
 
@@ -299,40 +351,77 @@ exports.getComplaints = async (req, res, next) => {
 exports.updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status, remarks, departmentId } = req.body;
+    const { status, remarks } = req.body;
     const userId = req.user.id;
 
-    const updateData = {};
-    if (status) updateData.currentStatus = status;
-    if (departmentId) updateData.departmentId = departmentId;
-
-    const updated = await prisma.complaint.update({
-      where: { id },
-      data: updateData,
-    });
-
-    let imageUrl = null;
-    if (req.file) {
-      imageUrl = StorageService.getFileUrl(req.file);
-      await prisma.complaintImage.create({
-        data: {
-          complaintId: id,
-          imageUrl,
-          imageType: 'RESOLUTION',
-        },
-      });
+    if (!status) {
+      return ApiResponse.error(res, 'A target status is required.', 400);
     }
 
-    if (status) {
-      await prisma.complaintStatusLog.create({
+    const VALID_STATUSES = ['SUBMITTED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'REJECTED'];
+    if (!VALID_STATUSES.includes(status)) {
+      return ApiResponse.error(res, `Invalid status "${status}".`, 400);
+    }
+
+    const existing = await prisma.complaint.findUnique({ where: { id } });
+    if (!existing) {
+      return ApiResponse.error(res, 'Complaint not found', 404);
+    }
+
+    // Persist optional proof-of-resolution evidence uploaded by the officer.
+    let resolutionImageUrl = null;
+    if (req.file) {
+      resolutionImageUrl = StorageService.getFileUrl(req.file);
+    }
+    const now = new Date();
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.complaint.update({
+        where: { id },
+        data: {
+          currentStatus: status,
+          // Escalation raises priority to CRITICAL, matching the SLA worker.
+          ...(status === 'ESCALATED'
+            ? { isEscalated: true, escalatedAt: existing.escalatedAt || now, priority: 'CRITICAL' }
+            : {}),
+        },
+      });
+
+      if (resolutionImageUrl) {
+        await tx.complaintImage.create({
+          data: { complaintId: id, imageUrl: resolutionImageUrl, imageType: 'RESOLUTION' },
+        });
+      }
+
+      await tx.complaintStatusLog.create({
         data: {
           complaintId: id,
-          status: status || updated.currentStatus,
-          remarks: remarks || `Status updated to ${status || updated.currentStatus}`,
+          status,
+          remarks: remarks || `Status updated to ${status}`,
           updatedById: userId,
         },
       });
-    }
+
+      // Notify the owning citizen once work is finished or refused.
+      // Notification.userId references User, so resolve citizen -> userId.
+      if (status === 'RESOLVED' || status === 'REJECTED') {
+        const citizen = await tx.citizen.findUnique({ where: { id: existing.citizenId } });
+        if (citizen) {
+          await tx.notification.create({
+            data: {
+              userId: citizen.userId,
+              title: status === 'RESOLVED'
+                ? `✅ Ticket #${existing.ticketNumber} resolved`
+                : `Ticket #${existing.ticketNumber} closed without resolution`,
+              message: status === 'RESOLVED'
+                ? `Your report "${existing.title}" has been marked as resolved.`
+                : `Your report "${existing.title}" was closed as ${status.toLowerCase()}. ${remarks || ''}`.trim(),
+            },
+          });
+        }
+      }
+
+      return row;
+    });
 
     return ApiResponse.success(res, 'Complaint status updated', updated);
   } catch (error) {

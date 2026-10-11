@@ -20,6 +20,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local build/verification scratch output
+build-out.txt
+verify-out.txt
+
 # Flutter / Android / iOS
 .dart_tool/
 .flutter-plugins

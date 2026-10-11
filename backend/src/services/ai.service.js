@@ -4,6 +4,14 @@ const FormData = require('form-data');
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 class AIService {
+  /**
+   * Ask the AI microservice for a full multi-modal analysis.
+   *
+   * Never throws: when the microservice is starting up or unreachable this
+   * returns a conservative default so complaint submission still succeeds.
+   * The fallback shape matches `FullAnalysisResponse` in
+   * ai-service/app/schemas/complaint.py exactly.
+   */
   static async analyzeComplaint({ category, latitude, longitude, description, fileBuffer, filename, existingComplaints }) {
     try {
       const formData = new FormData();
@@ -28,15 +36,15 @@ class AIService {
       return response.data;
     } catch (error) {
       console.warn('[AIService] Communication notice:', error.message);
-      // Fallback response if AI microservice is loading
+      // Fallback response if AI microservice is unavailable
       return {
-        category: category || 'POTHOLE',
+        category: category || 'Other Civic Issue',
         confidence: 0.85,
         severity_score: 5.5,
         priority: 'MEDIUM',
         composite_score: 55.0,
-        department_code: category === 'WATER_LEAK' ? 'WATER' : category === 'WASTE' ? 'WASTE' : 'ROAD',
-        department_name: 'Municipal Infrastructure',
+        department_code: null,
+        department_name: null,
         isDuplicate: false,
         duplicate_ticket: null,
         distance_meters: 0.0,

@@ -18,6 +18,7 @@ enum ComplaintStatus {
   SUBMITTED
   ASSIGNED
   IN_PROGRESS
+  ESCALATED
   RESOLVED
   REJECTED
 }
@@ -101,6 +102,8 @@ model Complaint {
   category         String
   currentStatus    ComplaintStatus   @default(SUBMITTED)
   priority         Priority          @default(MEDIUM)
+  isEscalated      Boolean           @default(false)
+  escalatedAt      DateTime?
   images           ComplaintImage[]
   location         Location?
   aiAnalysis       AIAnalysis?
@@ -108,6 +111,7 @@ model Complaint {
   assignments      Assignment[]
   feedback         Feedback?
   createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@map("complaints")
 }

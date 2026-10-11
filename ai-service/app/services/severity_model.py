@@ -1,23 +1,9 @@
-import re
+from app.services import taxonomy
 
-HIGH_URGENCY_KEYWORDS = [
-    "danger", "dangerous", "accident", "flooding", "flood", "overflow",
-    "overflowing", "spark", "sparking", "fire", "hazard", "hazardous",
-    "collapse", "collapsed", "emergency", "urgent", "injury", "blocked"
-]
+HIGH_URGENCY_KEYWORDS = taxonomy.HIGH_URGENCY_KEYWORDS
 
-MEDIUM_URGENCY_KEYWORDS = [
-    "broken", "damaged", "leaking", "dark", "smell", "foul", "traffic", "jam"
-]
+MEDIUM_URGENCY_KEYWORDS = taxonomy.MEDIUM_URGENCY_KEYWORDS
 
-CATEGORY_BASE_SEVERITY = {
-    "POTHOLE": 6.0,
-    "WATER_LEAK": 7.0,
-    "WASTE": 5.5,
-    "STREETLIGHT": 5.0,
-    "ROAD_DAMAGE": 6.5,
-    "OTHER": 4.0
-}
 
 class SeverityModel:
     @staticmethod
@@ -26,17 +12,22 @@ class SeverityModel:
         Multi-modal severity scoring engine.
         Returns: severity_score (float 0.0-10.0), priority (str: LOW|MEDIUM|HIGH|CRITICAL)
         """
-        base_score = CATEGORY_BASE_SEVERITY.get(category.upper(), 5.0)
+        # Baseline comes from the canonical taxonomy, so both legacy codes
+        # ("POTHOLE") and canonical labels ("Pothole") resolve correctly.
+        base_score = taxonomy.base_severity(category)
 
         # 1. Text Keyword Urgency Scoring
+        # Substring matching (not \b word boundaries) so plurals and inflections
+        # still score: "accidents" must match "accident", else a real hazard
+        # silently scores as LOW. This matches nlp_service/taxonomy behaviour.
         text_boost = 0.0
         if description:
             desc_lower = description.lower()
             for kw in HIGH_URGENCY_KEYWORDS:
-                if re.search(r'\b' + re.escape(kw) + r'\b', desc_lower):
+                if kw in desc_lower:
                     text_boost += 1.5
             for kw in MEDIUM_URGENCY_KEYWORDS:
-                if re.search(r'\b' + re.escape(kw) + r'\b', desc_lower):
+                if kw in desc_lower:
                     text_boost += 0.5
 
         # Cap text boost at 3.0

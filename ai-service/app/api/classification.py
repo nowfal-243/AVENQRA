@@ -1,47 +1,53 @@
 from fastapi import APIRouter, UploadFile, File, Form
 from typing import Optional
 import json
+
 from app.schemas.complaint import ClassificationResponse, FullAnalysisResponse
 from app.services.vision_model import vision_classifier
 from app.services.severity_model import severity_model
 from app.services.duplicate_detector import duplicate_detector
 from app.services.nlp_service import nlp_analyzer
 from app.services.routing_engine import routing_engine
+from app.services import taxonomy
 
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Classification & Analysis"])
+
 
 @router.post("/classify", response_model=ClassificationResponse)
 async def classify_issue_image(
     file: UploadFile = File(...),
-    description: Optional[str] = Form(None)
+    description: Optional[str] = Form(None),
 ):
+    """Single-pass image classification used by the mobile client."""
     contents = await file.read()
 
-    # 1. Vision Model Classification
+    # 1. Vision model classification (returns a legacy internal code)
     category, confidence, defect_score = vision_classifier.predict(contents)
 
-    # 2. Multi-Modal Severity & Priority Calculation
+    # 2. Multi-modal severity & priority calculation
     severity_score, priority = severity_model.calculate_severity(
         category=category,
         visual_defect_score=defect_score,
-        description=description
+        description=description,
     )
 
-    # 3. Department Routing Recommendation
-    dept_info = routing_engine.recommend_department(category, description)
+    # 3. Resolve the canonical label + owning municipal department
+    label = taxonomy.canonical_label(category)
+    dept_info = taxonomy.recommend_department(label, description)
 
-    # 4. Perceptual Image Hash
+    # 4. Perceptual image hash for downstream duplicate detection
     image_hash = duplicate_detector.compute_image_hash(contents)
 
     return ClassificationResponse(
-        category=category,
+        category=label,
         confidence=confidence,
         suggested_priority=priority,
         severity_score=severity_score,
         department_code=dept_info["department_code"],
         department_name=dept_info["department_name"],
-        image_hash=image_hash
+        image_hash=image_hash,
     )
+
 
 @router.post("/analyze-complaint", response_model=FullAnalysisResponse)
 async def analyze_full_complaint(
@@ -50,65 +56,76 @@ async def analyze_full_complaint(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     description: Optional[str] = Form(None),
-    existingComplaintsJson: Optional[str] = Form(None)
+    existingComplaintsJson: Optional[str] = Form(None),
 ):
+    """
+    Full multi-modal analysis performed at complaint submission time.
+
+    Combines vision inference, NLP keyword extraction, multi-modal severity
+    scoring, composite prioritisation and geospatial duplicate detection.
+    """
     contents = None
-    if file:
+    if file is not None:
         contents = await file.read()
 
-    predicted_category = category or "OTHER"
-    confidence = 0.85
-    defect_score = 5.0
-    image_hash = ""
-
-    if contents:
-        predicted_category, confidence, defect_score = vision_classifier.predict(contents)
-        image_hash = duplicate_detector.compute_image_hash(contents)
-
-    # If user provided a specific category and vision model confidence is low, use user category
-    final_category = predicted_category if confidence >= 0.70 else (category or predicted_category)
-
-    # NLP Keyword & Urgency
+    # 1. NLP text analysis
     nlp_res = nlp_analyzer.extract_keywords_and_category(description)
 
-    # Severity Score
+    # 2. Vision classification (only when an image was supplied)
+    vision_label, vision_confidence, defect_score = None, 0.0, 5.0
+    if contents:
+        vision_label, vision_confidence, defect_score = vision_classifier.predict(contents)
+
+    # 3. Resolve the category: explicit client value → vision → NLP → fallback
+    text_label = taxonomy.category_from_keywords(description)
+    resolved = category or vision_label or text_label
+    if not resolved or not str(resolved).strip():
+        resolved = "Other Civic Issue"
+    label = taxonomy.canonical_label(resolved)
+
+    # Confidence is highest when vision and text agree on the category.
+    confidence = vision_confidence or 0.85
+    if text_label and text_label == label:
+        confidence = min(0.98, round(confidence + 0.05, 2))
+
+    # 4. Multi-modal severity & priority
     severity_score, priority = severity_model.calculate_severity(
-        category=final_category,
+        category=label,
         visual_defect_score=defect_score,
-        description=description
+        description=description,
     )
 
-    # Spatial-Visual Duplicate Detection
-    existing_list = []
-    if existingComplaintsJson:
-        try:
-            existing_list = json.loads(existingComplaintsJson)
-        except Exception:
-            pass
-
-    dup_res = {"is_duplicate": False, "confidence": 0.0, "distance_meters": 0.0, "duplicate_ticket": None}
-    if latitude is not None and longitude is not None:
-        dup_res = duplicate_detector.check_duplicate(
-            category=final_category,
-            lat=latitude,
-            lng=longitude,
-            existing_complaints=existing_list,
-            image_bytes=contents
-        )
-
-    # Composite Priority Score
-    dup_count = 1 if dup_res["is_duplicate"] else 0
+    # 5. Composite priority (adds duplicate-volume and urgency weighting)
     priority_res = routing_engine.compute_composite_priority(
         severity_score=severity_score,
-        duplicate_count=dup_count,
-        urgency_flag=nlp_res["urgency_flag"]
+        duplicate_count=0,
+        urgency_flag=nlp_res["urgency_flag"],
     )
 
-    # Routing Department
-    dept_info = routing_engine.recommend_department(final_category, description)
+    # 6. Geospatial duplicate detection against existing complaints
+    dup_res = {"is_duplicate": False, "confidence": 0.0, "distance_meters": 0.0, "duplicate_ticket": None}
+    if latitude is not None and longitude is not None:
+        existing = []
+        if existingComplaintsJson:
+            try:
+                existing = json.loads(existingComplaintsJson)
+            except (ValueError, TypeError):
+                existing = []
+        dup_res = duplicate_detector.check_duplicate(
+            category=label,
+            lat=latitude,
+            lng=longitude,
+            existing_complaints=existing,
+            image_bytes=contents,
+        )
+
+    # 7. Department routing
+    dept_info = taxonomy.recommend_department(label, description)
+
+    image_hash = duplicate_detector.compute_image_hash(contents) if contents else ""
 
     return FullAnalysisResponse(
-        category=final_category,
+        category=label,
         confidence=confidence,
         severity_score=severity_score,
         priority=priority_res["priority"],
@@ -119,5 +136,5 @@ async def analyze_full_complaint(
         duplicate_ticket=dup_res["duplicate_ticket"],
         distance_meters=dup_res["distance_meters"],
         keywords=nlp_res["keywords"],
-        image_hash=image_hash
+        image_hash=image_hash,
     )

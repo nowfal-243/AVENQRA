@@ -1,28 +1,24 @@
-DEPARTMENT_ROUTING_MAP = {
-    "POTHOLE": {"code": "ROAD", "name": "Roads & Transport Infrastructure"},
-    "ROAD_DAMAGE": {"code": "ROAD", "name": "Roads & Transport Infrastructure"},
-    "WATER_LEAK": {"code": "WATER", "name": "Water Supply & Sewerage Board"},
-    "DRAINAGE": {"code": "WATER", "name": "Water Supply & Sewerage Board"},
-    "WASTE": {"code": "WASTE", "name": "Solid Waste Management"},
-    "GARBAGE": {"code": "WASTE", "name": "Solid Waste Management"},
-    "STREETLIGHT": {"code": "ELEC", "name": "Electricity & Streetlighting Board"},
-    "ELECTRICAL": {"code": "ELEC", "name": "Electricity & Streetlighting Board"},
-    "OTHER": {"code": "GEN", "name": "General Public Works"}
-}
+"""
+Department routing + composite priority scoring.
+
+Department resolution is delegated to the canonical taxonomy so the AI
+service, the Express backend and the web portal always agree on which
+municipal department owns a given civic issue.
+"""
+
+from app.services import taxonomy
+
+DEPARTMENT_ROUTING_MAP = taxonomy.DEPARTMENTS
+
 
 class RoutingEngine:
     @staticmethod
     def recommend_department(category: str, description: str = None):
         """
         Determines the optimal municipal department code and name.
+        Accepts legacy codes ("POTHOLE") or canonical labels ("Pothole").
         """
-        cat_upper = category.upper() if category else "OTHER"
-        dept_info = DEPARTMENT_ROUTING_MAP.get(cat_upper, DEPARTMENT_ROUTING_MAP["OTHER"])
-
-        return {
-            "department_code": dept_info["code"],
-            "department_name": dept_info["name"]
-        }
+        return taxonomy.recommend_department(category, description)
 
     @staticmethod
     def compute_composite_priority(severity_score: float, duplicate_count: int = 0, urgency_flag: bool = False):
@@ -49,9 +45,7 @@ class RoutingEngine:
         else:
             priority = "LOW"
 
-        return {
-            "composite_score": composite_score,
-            "priority": priority
-        }
+        return {"composite_score": composite_score, "priority": priority}
+
 
 routing_engine = RoutingEngine()

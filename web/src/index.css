@@ -2,8 +2,264 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   AVENQRA Design System — smart-city operations command center
+   Deep navy / slate foundation with electric cyan-blue accents.
+   ========================================================================== */
+
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+    @apply bg-slate-50 text-slate-800 font-sans antialiased transition-colors duration-200;
+  }
+
+  .dark body,
+  body.dark {
+    @apply bg-navy-950 text-slate-200;
+  }
+
+  ::selection {
+    @apply bg-cyan-500/25 text-cyan-600 dark:text-cyan-300;
+  }
+
+  /* Visible, consistent keyboard focus */
+  :focus-visible {
+    outline: 2px solid theme('colors.cyan.500');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Refined scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 0.45) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-400/40;
+  }
+
+  .dark *::-webkit-scrollbar-thumb {
+    @apply bg-slate-600/50;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400/70;
+  }
+
+  /* Recharts text defaults */
+  .recharts-text {
+    @apply fill-slate-500 text-[11px];
+  }
+
+  .dark .recharts-text {
+    @apply fill-slate-400;
   }
 }
+
+@layer components {
+  /* ----- Surfaces ----- */
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-navy-900 dark:shadow-none;
+  }
+
+  .card-hover {
+    @apply transition-all duration-150 hover:border-slate-300 hover:shadow-card-hover dark:hover:border-slate-700;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100;
+  }
+
+  .panel-subtitle {
+    @apply mt-0.5 text-xs text-slate-500 dark:text-slate-400;
+  }
+
+  /* ----- Buttons ----- */
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold leading-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60 disabled:pointer-events-none disabled:opacity-50 active:translate-y-px;
+  }
+
+  .btn-primary {
+    @apply bg-gradient-to-b from-cyan-500 to-blue-600 text-white shadow-sm hover:from-cyan-400 hover:to-blue-500;
+  }
+
+  .btn-secondary {
+    @apply border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-navy-850 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-navy-800;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-navy-800 dark:hover:text-white;
+  }
+
+  .btn-danger {
+    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-500;
+  }
+
+  .btn-success {
+    @apply bg-emerald-600 text-white shadow-sm hover:bg-emerald-500;
+  }
+
+  .btn-xs {
+    @apply px-2 py-1 text-[11px];
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .btn-lg {
+    @apply px-5 py-2.5 text-sm;
+  }
+
+  /* ----- Form controls ----- */
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-navy-850 dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+
+  .input-invalid {
+    @apply border-rose-400 focus:border-rose-500 focus:ring-rose-500/20 dark:border-rose-500/60;
+  }
+
+  .select {
+    @apply input cursor-pointer appearance-none bg-no-repeat pr-8;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
+    background-size: 1em;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400;
+  }
+
+  .field-error {
+    @apply mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400;
+  }
+
+  /* ----- Badges ----- */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide;
+  }
+
+  .kbd {
+    @apply inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-slate-300 bg-slate-100 px-1.5 font-mono text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-navy-800 dark:text-slate-400;
+  }
+
+  /* ----- Tables ----- */
+  .table-shell {
+    @apply w-full overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-navy-900;
+  }
+
+  .aven-table {
+    @apply w-full min-w-[720px] text-left text-sm;
+  }
+
+  .aven-table thead {
+    @apply border-b border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-navy-850;
+  }
+
+  .aven-table th {
+    @apply px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+  }
+
+  .aven-table td {
+    @apply px-4 py-3 align-middle text-slate-700 dark:text-slate-300;
+  }
+
+  .aven-table tbody tr {
+    @apply border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/70 dark:hover:bg-navy-850;
+  }
+
+  /* ----- Misc ----- */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-slate-200 dark:bg-slate-800;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+    animation: skeleton-shimmer 1.4s infinite;
+  }
+
+  .dark .skeleton::after {
+    background: linear-gradient(90deg, transparent, rgb(148 163 184 / 0.12), transparent);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Leaflet adjustments */
+.leaflet-container {
+  font-family: inherit;
+  background: #e2e8f0;
+}
+
+.dark .leaflet-container {
+  background: #0d1524;
+}
+
+.dark .leaflet-control-attribution {
+  background: rgb(10 16 28 / 0.8) !important;
+  color: #94a3b8;
+}
+
+.dark .leaflet-control-attribution a {
+  color: #67e8f9;
+}
+
+.dark .leaflet-bar a {
+  background: #111b2e;
+  color: #e2e8f0;
+  border-bottom-color: #1e293b;
+}
+
+.custom-leaflet-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
