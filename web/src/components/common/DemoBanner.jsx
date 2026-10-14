@@ -21,7 +21,9 @@ export default function DemoBanner() {
           <span className="font-bold text-violet-800 dark:text-violet-200">DEMO MODE</span>
           <span className="text-violet-700/90 dark:text-violet-300/90">
             — showing simulated data stored in this browser.
-            {demoNotice ? ` ${demoNotice}` : modeError ? ` Reason: ${modeError}` : ''}
+            {demoNotice || modeError
+              ? ` Live API unavailable — start the backend + database, then retry.`
+              : ''}
           </span>
         </div>
         <button

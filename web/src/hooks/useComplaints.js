@@ -17,6 +17,7 @@ export default function useComplaints() {
     errors,
     lastUpdated,
     isDemo,
+    slaMinutes,
     refreshComplaints,
     patchComplaint,
   } = useData();
@@ -87,6 +88,7 @@ export default function useComplaints() {
     error: errors.complaints,
     lastUpdated,
     isDemo,
+    slaMinutes,
     refresh,
     changeStatus,
     assignOfficer,

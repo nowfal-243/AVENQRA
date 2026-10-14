@@ -237,9 +237,11 @@ export default function LiveReporterSimulator() {
         status: row?.currentStatus || 'SUBMITTED',
         source,
         note,
-        department: recommendedDept.name,
+        department: row?.department?.name || recommendedDept.name,
         eligibleOfficers: recommendedDept.activeCount,
         slaDeadline,
+        assigned: !!(row?.assignments?.length || row?.currentStatus === 'ASSIGNED'),
+        notify: source === 'live' ? 'Corporation notification queued (in-app; external DEMO unless configured).' : note,
       });
       toast.success(`Complaint ${row?.ticketNumber || ''} submitted (${source} mode).`);
       setTitle('');
@@ -289,6 +291,11 @@ export default function LiveReporterSimulator() {
                 Status: <strong>{result.status}</strong> · Recommended department: <strong>{result.department}</strong>{' '}
                 · SLA deadline: {result.slaDeadline ? formatDateTime(result.slaDeadline) : '—'}
               </p>
+              {result.notify && (
+                <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
+                  {result.assigned ? 'Auto-dispatched. ' : ''}{result.notify}
+                </p>
+              )}
               {result.source === 'demo' && (
                 <p className="mt-1 text-[11px] text-violet-600 dark:text-violet-300">
                   {result.note || 'Stored in this browser only — nothing was sent to a server.'}

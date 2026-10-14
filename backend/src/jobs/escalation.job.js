@@ -1,10 +1,11 @@
 const prisma = require('../config/db');
 
-const SLA_LIMIT_MS = 30 * 60 * 1000; // 30 Minutes SLA Limit
+const SLA_MINUTES = parseInt(process.env.SLA_MINUTES || '30', 10);
+const SLA_LIMIT_MS = SLA_MINUTES * 60 * 1000;
 
 class EscalationJob {
   static init() {
-    console.log('⚡ AVENQRA 30-Minute SLA Escalation Monitor initialized');
+    console.log(`⚡ AVENQRA ${SLA_MINUTES}-Minute SLA Escalation Monitor initialized`);
     // Run SLA audit check every 30 seconds
     setInterval(async () => {
       try {
@@ -16,14 +17,14 @@ class EscalationJob {
   }
 
   static async processEscalations() {
-    const thirtyMinutesAgo = new Date(Date.now() - SLA_LIMIT_MS);
+    const slaAgo = new Date(Date.now() - SLA_LIMIT_MS);
 
-    // Find overdue unresolved complaints older than 30 minutes
+    // Find overdue unresolved complaints older than the SLA window
     const overdueComplaints = await prisma.complaint.findMany({
       where: {
         isEscalated: false,
         currentStatus: { in: ['SUBMITTED', 'ASSIGNED', 'IN_PROGRESS'] },
-        createdAt: { lte: thirtyMinutesAgo },
+        createdAt: { lte: slaAgo },
       },
       include: {
         department: true,
@@ -32,7 +33,7 @@ class EscalationJob {
 
     if (overdueComplaints.length === 0) return;
 
-    console.warn(`⚡ [SLA ESCALATION] Found ${overdueComplaints.length} complaints breaching 30-min SLA threshold. Escalating to Highest Authority...`);
+    console.warn(`⚡ [SLA ESCALATION] Found ${overdueComplaints.length} complaints breaching ${SLA_MINUTES}-min SLA threshold. Escalating to Highest Authority...`);
 
     // Fetch Super Admin users (Highest Authority)
     const superAdmins = await prisma.user.findMany({
@@ -57,7 +58,7 @@ class EscalationJob {
           data: {
             complaintId: complaint.id,
             status: 'ESCALATED',
-            remarks: `🚨 AUTOMATED 30-MIN SLA ESCALATION: Unresolved work after 30 minutes. Escalated directly to Highest Municipal Authority.`,
+            remarks: `🚨 AUTOMATED ${SLA_MINUTES}-MIN SLA ESCALATION: Unresolved work after ${SLA_MINUTES} minutes. Escalated directly to Highest Municipal Authority.`,
           },
         });
 
@@ -67,7 +68,7 @@ class EscalationJob {
             data: {
               userId: admin.id,
               title: `🚨 CRITICAL SLA BREACH: Ticket #${complaint.ticketNumber}`,
-              message: `Ticket #${complaint.ticketNumber} (${complaint.category}) at ${complaint.title} exceeded the 30-minute resolution SLA and has been escalated to your desk.`,
+              message: `Ticket #${complaint.ticketNumber} (${complaint.category}) at ${complaint.title} exceeded the ${SLA_MINUTES}-minute resolution SLA and has been escalated to your desk.`,
             },
           });
         }

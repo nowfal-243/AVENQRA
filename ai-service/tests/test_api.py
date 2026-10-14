@@ -21,9 +21,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.main import app  # noqa: E402
 from app.services import taxonomy  # noqa: E402
 
-httpx = pytest.importorskip("httpx")
+# Starlette's TestClient is built on httpx, so skip the whole module when it is
+# absent rather than failing at fixture setup.
+pytest.importorskip("httpx")
 
 VALID_DEPARTMENT_CODES = set(taxonomy.DEPARTMENTS)
+VALID_DEPARTMENT_NAMES = set(taxonomy.DEPARTMENTS.values())
 VALID_CATEGORIES = set(taxonomy.CATEGORY_LABELS)
 
 
@@ -37,8 +40,13 @@ def make_image(color=(90, 90, 90), size=(128, 128)):
 
 @pytest.fixture()
 def client():
-    transport = httpx.ASGITransport(app=app)
-    with httpx.Client(transport=transport, base_url="http://test") as c:
+    # httpx >= 0.28 removed synchronous support from ASGITransport, so a raw
+    # httpx.Client can no longer drive an ASGI app in-process. Starlette's
+    # TestClient provides its own sync transport (it runs the ASGI app through
+    # a portal), so the tests stay synchronous and work on every httpx release.
+    from starlette.testclient import TestClient
+
+    with TestClient(app) as c:
         yield c
 
 
@@ -59,7 +67,9 @@ def test_classify_returns_all_required_fields(client):
 
     # department_code/department_name are required (non-Optional) fields.
     assert body["department_code"] in VALID_DEPARTMENT_CODES
-    assert body["department_name"] in VALID_DEPARTMENT_CODES and body["department_name"]
+    # department_name is the human-readable label, so it is checked against the
+    # department names rather than the codes.
+    assert body["department_name"] in VALID_DEPARTMENT_NAMES and body["department_name"]
     assert body["category"] in VALID_CATEGORIES
     assert 0.0 <= body["confidence"] <= 1.0
     assert 1.0 <= body["severity_score"] <= 10.0
@@ -124,6 +134,51 @@ def test_analyze_complaint_survives_malformed_existing_json(client):
     )
     assert res.status_code == 200, res.text
     assert res.json()["isDuplicate"] is False
+
+
+def test_department_code_hint_does_not_mask_text_category(client):
+    """Regression test: the client sends *department* codes as `category`.
+
+    The web/mobile clients post values such as ``ROAD`` or ``ELEC`` — these are
+    routing hints, not civic-issue categories, and every one of them
+    canonicalises to "Other Civic Issue". Accepting them as authoritative threw
+    away a far more specific NLP/vision verdict, so a clear pothole report was
+    being analysed as a generic "Other Civic Issue". The description must win.
+    """
+    res = client.post(
+        "/api/v1/ai/analyze-complaint",
+        data={
+            "category": "ROAD",
+            "latitude": 12.9716,
+            "longitude": 77.5946,
+            "description": "Large pothole on the main road causing accidents",
+            "existingComplaintsJson": "[]",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert body["category"] == "Pothole"
+    assert body["department_code"] == "ROAD"
+
+
+def test_department_code_hint_still_routes_when_text_is_vague(client):
+    """A department code must still be honoured when the text says nothing."""
+    res = client.post(
+        "/api/v1/ai/analyze-complaint",
+        data={
+            "category": "ELEC",
+            "latitude": 12.9716,
+            "longitude": 77.5946,
+            "description": "I would like to raise a general civic request please",
+            "existingComplaintsJson": "[]",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert body["category"] == "Other Civic Issue"
+    assert body["department_code"] == "ELEC"
 
 
 @pytest.mark.parametrize("category", taxonomy.CATEGORY_LABELS)

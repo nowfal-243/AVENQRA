@@ -23,6 +23,14 @@ yarn-error.log*
 # Local build/verification scratch output
 build-out.txt
 verify-out.txt
+pytest.out
+
+# Runtime artifacts (never commit these)
+backend/uploads/
+ai-service/ai.err
+ai-service/ai.out
+.pytest_cache/
+*.err
 
 # Flutter / Android / iOS
 .dart_tool/

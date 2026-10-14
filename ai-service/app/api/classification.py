@@ -78,7 +78,18 @@ async def analyze_full_complaint(
 
     # 3. Resolve the category: explicit client value → vision → NLP → fallback
     text_label = taxonomy.category_from_keywords(description)
-    resolved = category or vision_label or text_label
+
+    # The mobile/web client sends *department* codes (ROAD, ELEC, WASTE, ...) as
+    # `category`. Those are routing hints, not civic-issue categories, and
+    # canonical_label() collapses every one of them to "Other Civic Issue".
+    # Treating them as authoritative would therefore discard a far more
+    # specific vision/NLP verdict, so only accept a client value that actually
+    # resolves to a real canonical category.
+    client_label = taxonomy.canonical_label(category) if category else None
+    if client_label == "Other Civic Issue":
+        client_label = None
+
+    resolved = client_label or vision_label or text_label
     if not resolved or not str(resolved).strip():
         resolved = "Other Civic Issue"
     label = taxonomy.canonical_label(resolved)
@@ -120,7 +131,17 @@ async def analyze_full_complaint(
         )
 
     # 7. Department routing
+    # The resolved label usually implies the correct department, but a client
+    # that sent an explicit department code still gets that honoured when the
+    # category alone cannot decide it.
     dept_info = taxonomy.recommend_department(label, description)
+    if category and dept_info["department_code"] == taxonomy.DEFAULT_DEPARTMENT:
+        hinted = str(category).strip().upper()
+        if hinted in taxonomy.DEPARTMENTS:
+            dept_info = {
+                "department_code": hinted,
+                "department_name": taxonomy.DEPARTMENTS[hinted],
+            }
 
     image_hash = duplicate_detector.compute_image_hash(contents) if contents else ""
 

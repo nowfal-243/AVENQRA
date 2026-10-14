@@ -7,6 +7,7 @@ const officerRoutes = require('./officer.routes');
 const assignmentRoutes = require('./assignment.routes');
 const feedbackRoutes = require('./feedback.routes');
 const notificationRoutes = require('./notification.routes');
+const insightsRoutes = require('./insights.routes');
 
 const router = express.Router();
 
@@ -18,5 +19,7 @@ router.use('/officers', officerRoutes);
 router.use('/assignments', assignmentRoutes);
 router.use('/feedback', feedbackRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/', insightsRoutes);
 
 module.exports = router;
+

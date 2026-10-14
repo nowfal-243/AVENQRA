@@ -4,6 +4,7 @@ import Header from './Header';
 import Sidebar from './Sidebar';
 import DemoBanner from '../common/DemoBanner';
 import ErrorBoundary from '../common/ErrorBoundary';
+import AIAssistant from '../assistant/AIAssistant';
 
 const SIDEBAR_KEY = 'avenqra_sidebar_collapsed';
 
@@ -69,6 +70,7 @@ export default function DashboardLayout() {
             </ErrorBoundary>
           </div>
         </main>
+        <AIAssistant />
 
         <footer className="border-t border-slate-200 px-5 py-3.5 text-center text-[11px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
           AVENQRA — AI-Driven Civic Intelligence, Response &amp; Resolution Platform · SLA

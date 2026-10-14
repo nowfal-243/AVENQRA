@@ -14,6 +14,7 @@ import notificationService from '../services/notificationService';
 import { getMode, resolveMode, setMode, subscribeMode, getLastError } from '../services/mode';
 import { checkHealth } from '../services/apiClient';
 import { subscribeDemoStore } from '../services/demoStore';
+import useRealtime from '../hooks/useRealtime';
 import { getSlaMinutes, setSlaMinutes as persistSlaMinutes } from '../utils/permissions';
 import { useAuth } from './AuthContext';
 
@@ -185,6 +186,10 @@ export function DataProvider({ children }) {
   }, [mode]);
 
     /* Single polling timer for live data (paused while tab hidden) */
+  useRealtime({
+    enabled: mode === 'live' && !!token,
+    onEvent: () => { if (document.visibilityState === 'visible') { loadComplaints(); loadNotifications(); } },
+  });
   useEffect(() => {
     if (mode !== 'live' || !token) return undefined;
     const timer = setInterval(() => {

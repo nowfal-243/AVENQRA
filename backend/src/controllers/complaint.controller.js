@@ -30,7 +30,16 @@ exports.createComplaint = async (req, res, next) => {
       return ApiResponse.error(res, 'Title, description, category, latitude, and longitude are required.', 400);
     }
 
-    // Resolve citizen profile ID
+    // Resolve citizen profile ID. `userId` comes from a signed JWT, which can
+    // outlive the user row it points at (the database may be re-seeded while a
+    // browser still holds an older session token). Verify the parent user
+    // exists so a stale token yields a clear 401 instead of an opaque Prisma
+    // foreign-key violation, and so the error is not mistaken for a DB outage.
+    const account = await prisma.user.findUnique({ where: { id: userId } });
+    if (!account) {
+      return ApiResponse.error(res, 'Your session has expired. Please sign in again.', 401);
+    }
+
     let citizen = await prisma.citizen.findUnique({ where: { userId } });
     if (!citizen) {
       citizen = await prisma.citizen.create({ data: { userId } });
@@ -215,6 +224,24 @@ exports.createComplaint = async (req, res, next) => {
         department: true,
       },
     });
+
+    // --- ADDITIVE: durable corporation notification + realtime (never blocks save) ---
+    try {
+      const Notify = require('../services/notification.service');
+      const slaMin = parseInt(process.env.SLA_MINUTES || '30', 10);
+      const slaDeadline = new Date(new Date(fullComplaint.createdAt).getTime() + slaMin * 60000).toISOString();
+      const msg = Notify.buildComplaintMessage({
+        ticketNumber, title, category, severity: fullComplaint.priority,
+        address: fullComplaint.location?.addressFormatted, departmentName: fullComplaint.department?.name,
+        officerName: officerToAssign ? `Badge #${officerToAssign.badgeNumber}` : null,
+        createdAt: fullComplaint.createdAt, slaDeadline, linkPath: `#/complaints?focus=${fullComplaint.id}`,
+      });
+      if (officerToAssign) Notify.notify({ userId: officerToAssign.userId, title: `New task ${ticketNumber}`, message: msg, kind: 'complaint:submitted', complaintId: fullComplaint.id, payload: { ticketNumber } });
+      const realtime = require('../services/realtime.service');
+      const supers = await prisma.user.findMany({ where: { role: 'SUPER_ADMIN' }, select: { id: true } });
+      realtime.emitToUsers(supers.map((u) => u.id), 'complaint:created', fullComplaint);
+      if (officerToAssign) realtime.emitToUser(officerToAssign.userId, 'complaint:assigned', fullComplaint);
+    } catch (e) { console.warn('[AVENQRA] post-create notify skipped:', e.message); }
 
     return ApiResponse.success(res, 'Complaint submitted & nearest municipal officer dispatched!', fullComplaint, 201);
   } catch (error) {
@@ -422,6 +449,14 @@ exports.updateStatus = async (req, res, next) => {
 
       return row;
     });
+
+    // ADDITIVE: realtime broadcast for status transitions (best-effort).
+    try {
+      const realtime = require('../services/realtime.service');
+      const ev = status === 'RESOLVED' ? 'complaint:completed' : status === 'ESCALATED' ? 'complaint:escalated' : 'complaint:statusUpdated';
+      const admins = await prisma.user.findMany({ where: { role: { in: ['SUPER_ADMIN', 'DEPARTMENT_ADMIN'] } }, select: { id: true } });
+      realtime.emitToUsers(admins.map((u) => u.id), ev, updated);
+    } catch (e) { console.warn('[AVENQRA] status realtime skipped:', e.message); }
 
     return ApiResponse.success(res, 'Complaint status updated', updated);
   } catch (error) {
