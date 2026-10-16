@@ -29,14 +29,20 @@ exports.createDepartment = async (req, res, next) => {
 
 exports.getDepartments = async (req, res, next) => {
   try {
-    const departments = await prisma.department.findMany({
-      orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: { officers: true, complaints: true },
+    let departments = [];
+    try {
+      departments = await prisma.department.findMany({
+        orderBy: { name: 'asc' },
+        include: {
+          _count: {
+            select: { officers: true, complaints: true },
+          },
         },
-      },
-    });
+      });
+    } catch (dbErr) {
+      const { getDemoDepartments } = require('../data/demo-store');
+      departments = getDemoDepartments();
+    }
 
     return ApiResponse.success(res, 'Departments retrieved successfully', departments);
   } catch (error) {
@@ -47,13 +53,19 @@ exports.getDepartments = async (req, res, next) => {
 exports.getDepartmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const department = await prisma.department.findUnique({
-      where: { id },
-      include: {
-        officers: { include: { user: { select: { name: true, email: true, phone: true } } } },
-        complaints: { take: 10, orderBy: { createdAt: 'desc' } },
-      },
-    });
+    let department = null;
+    try {
+      department = await prisma.department.findUnique({
+        where: { id },
+        include: {
+          officers: { include: { user: { select: { name: true, email: true, phone: true } } } },
+          complaints: { take: 10, orderBy: { createdAt: 'desc' } },
+        },
+      });
+    } catch (dbErr) {
+      const { getDemoDepartments } = require('../data/demo-store');
+      department = getDemoDepartments().find((d) => d.id === id || d.code === id) || null;
+    }
 
     if (!department) {
       return ApiResponse.error(res, 'Department not found.', 404);

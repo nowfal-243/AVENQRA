@@ -48,13 +48,27 @@ export function computeKpis(complaints, slaMinutes = getSlaMinutes()) {
   }).length;
   const resolved = complaints.filter((c) => c.currentStatus === 'RESOLVED').length;
   const rejected = complaints.filter((c) => c.currentStatus === 'REJECTED').length;
+  const completed = resolved + rejected;
 
   const resolvedAll = complaints.filter(isResolved);
   const withinSla = resolvedAll.filter((c) => getSlaState(c, slaMinutes).withinSla === true).length;
   const slaCompliance = resolvedAll.length > 0 ? (withinSla / resolvedAll.length) * 100 : null;
+  const slaBreaches = complaints.filter((c) => c.isEscalated || getSlaState(c, slaMinutes).overdue).length;
 
-  return { total, newlyAssigned, inProgress, escalated, resolved, rejected, slaCompliance, resolvedTotal: resolvedAll.length };
+  return {
+    total,
+    newlyAssigned,
+    inProgress,
+    escalated,
+    resolved,
+    rejected,
+    completed,
+    slaBreaches,
+    slaCompliance,
+    resolvedTotal: resolvedAll.length,
+  };
 }
+
 
 export function categoryDistribution(complaints) {
   const map = new Map();

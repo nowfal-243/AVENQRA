@@ -18,7 +18,7 @@ router.use(authenticate);
 router.get('/kanban', getKanbanComplaints);
 
 // Citizen Routes
-router.post('/', upload.single('media'), createComplaint);
+router.post('/', upload.single('media'), upload.pushToSupabase, createComplaint);
 router.get('/my', getMyComplaints);
 router.get('/:id', getComplaintById);
 
@@ -31,6 +31,7 @@ router.patch(
   '/:id/status',
   authorize('OFFICER', 'DEPARTMENT_ADMIN', 'SUPER_ADMIN'),
   upload.single('resolutionImage'),
+  upload.pushToSupabase,
   updateStatus
 );
 

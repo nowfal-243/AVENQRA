@@ -64,15 +64,21 @@ exports.getOfficers = async (req, res, next) => {
     if (departmentId) where.departmentId = departmentId;
     if (status) where.status = status;
 
-    const officers = await prisma.officer.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
-        department: { select: { id: true, name: true, code: true } },
-        _count: { select: { assignments: true } },
-      },
-      orderBy: { badgeNumber: 'asc' },
-    });
+    let officers = [];
+    try {
+      officers = await prisma.officer.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+          department: { select: { id: true, name: true, code: true } },
+          _count: { select: { assignments: true } },
+        },
+        orderBy: { badgeNumber: 'asc' },
+      });
+    } catch (dbErr) {
+      const { getDemoOfficers } = require('../data/demo-store');
+      officers = getDemoOfficers({ departmentId, status });
+    }
 
     return ApiResponse.success(res, 'Field officers retrieved successfully', officers);
   } catch (error) {
@@ -84,17 +90,23 @@ exports.getOfficerById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const officer = await prisma.officer.findUnique({
-      where: { id },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-        department: true,
-        assignments: {
-          include: { complaint: true },
-          orderBy: { assignedAt: 'desc' },
+    let officer = null;
+    try {
+      officer = await prisma.officer.findUnique({
+        where: { id },
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          department: true,
+          assignments: {
+            include: { complaint: true },
+            orderBy: { assignedAt: 'desc' },
+          },
         },
-      },
-    });
+      });
+    } catch (dbErr) {
+      const { getDemoOfficers } = require('../data/demo-store');
+      officer = getDemoOfficers().find((o) => o.id === id || o.badgeNumber === id) || null;
+    }
 
     if (!officer) {
       return ApiResponse.error(res, 'Officer not found.', 404);

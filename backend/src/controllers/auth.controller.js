@@ -1,6 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const prisma = require('../config/db');
+const dbModule = require('../config/db');
+const prisma = dbModule.prisma || dbModule;
+const withTimeout = dbModule.withTimeout || ((p) => p);
+const isDbReachable = dbModule.isDbReachable || (async () => true);
+const DB_TIMEOUT_MS = parseInt(process.env.DB_TIMEOUT_MS || '2500', 10);
 const ApiResponse = require('../utils/api-response');
 const OTPService = require('../services/otp.service');
 
@@ -9,11 +13,12 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, isVerified: user.isVerified },
+    { id: user.id, email: user.email, name: user.name, role: user.role, isVerified: user.isVerified },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
 };
+
 
 exports.register = async (req, res, next) => {
   try {
@@ -87,10 +92,14 @@ exports.login = async (req, res, next) => {
 
     let user = null;
     try {
-      user = await prisma.user.findUnique({
-        where: { email },
-        include: { citizenProfile: true, officerProfile: true },
-      });
+      // Fast-fail: TCP-probe Postgres first so a stopped DB resolves in
+      // ~1s instead of hanging the login request for 10-30s.
+      if (await isDbReachable(800)) {
+        user = await withTimeout(prisma.user.findUnique({
+          where: { email },
+          include: { citizenProfile: true, officerProfile: true },
+        }), DB_TIMEOUT_MS, 'login lookup');
+      }
     } catch (dbErr) {
       console.warn('[Auth] Database notice, checking demo credentials:', dbErr.message);
     }

@@ -3,8 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Supabase requires the direct (non-pooled, port 5432) connection for
+  // migrations, while the pooled PgBouncer URL (port 6543) is best at runtime.
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {

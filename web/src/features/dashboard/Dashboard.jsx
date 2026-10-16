@@ -125,24 +125,59 @@ export default function Dashboard() {
   const recentActivity = useMemo(() => {
     const events = [];
     complaints.forEach((c) => {
+      // Creation event
+      events.push({
+        id: `created-${c.id}`,
+        ticket: c.ticketNumber,
+        status: 'SUBMITTED',
+        remarks: `Complaint filed in category: ${c.category}`,
+        at: c.createdAt,
+        by: c.citizen?.user?.name || 'Citizen Reporter',
+      });
+
+      // Assignment event
+      (c.assignments || []).forEach((a) => {
+        events.push({
+          id: `as-${a.id}`,
+          ticket: c.ticketNumber,
+          status: 'ASSIGNED',
+          remarks: `Dispatched to Officer ${a.officer?.user?.name || 'Officer'} (#${a.officer?.badgeNumber || '—'})`,
+          at: a.assignedAt || c.updatedAt,
+          by: a.assignedBy?.name || 'Municipal Admin',
+        });
+      });
+
+      // Evidence upload event
+      (c.images || []).filter((img) => img.imageType === 'RESOLUTION').forEach((img) => {
+        events.push({
+          id: `img-${img.id}`,
+          ticket: c.ticketNumber,
+          status: 'RESOLUTION_EVIDENCE',
+          remarks: 'Resolution proof photo uploaded by field crew',
+          at: img.uploadedAt || c.updatedAt,
+          by: 'Field Officer',
+        });
+      });
+
+      // Status logs
       (c.statusLogs || []).forEach((log) => {
         events.push({
           id: `${c.id}-${log.id}`,
           ticket: c.ticketNumber,
           status: log.status,
-          remarks: log.remarks,
+          remarks: log.remarks || `Status transitioned to ${log.status}`,
           at: log.changedAt,
           by: log.updatedBy?.name || 'System',
         });
       });
     });
-    return events.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8);
+    return events.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }, [complaints]);
 
   if (loading && complaints.length === 0) {
     return (
       <div className="space-y-4">
-        <LoadingSkeleton variant="stats" count={6} label="Loading dashboard metrics…" />
+        <LoadingSkeleton variant="stats" count={7} label="Loading dashboard metrics…" />
         <div className="grid gap-4 lg:grid-cols-3">
           <LoadingSkeleton variant="chart" />
           <LoadingSkeleton variant="chart" />
@@ -152,9 +187,23 @@ export default function Dashboard() {
     );
   }
 
-  return <DashboardView complaints={complaints} isDemo={isDemo} slaMinutes={slaMinutes} kpis={kpis} trends={trends} overdue={overdue} statusOverview={statusOverview} priorityQueue={priorityQueue} recent={recent} recentActivity={recentActivity} error={error} refresh={refresh} />;
+  return (
+    <DashboardView
+      complaints={complaints}
+      isDemo={isDemo}
+      slaMinutes={slaMinutes}
+      kpis={kpis}
+      trends={trends}
+      overdue={overdue}
+      statusOverview={statusOverview}
+      priorityQueue={priorityQueue}
+      recent={recent}
+      recentActivity={recentActivity}
+      error={error}
+      refresh={refresh}
+    />
+  );
 }
-
 
 function DashboardView({
   complaints,
@@ -174,15 +223,19 @@ function DashboardView({
     <div>
       <PageHeader
         title="Operations Overview"
-        description="Live civic intelligence across departments, officers and SLA compliance."
+        description="Live civic intelligence across departments, officers, notifications and SLA compliance."
         badge={
           isDemo ? (
             <span className="badge border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
               demo data
             </span>
           ) : (
-            <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-              live
+            <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              live realtime
             </span>
           )
         }
@@ -207,7 +260,7 @@ function DashboardView({
                 {overdue.length} complaint{overdue.length === 1 ? '' : 's'} past the {slaMinutes}-minute SLA
               </p>
               <p className="text-xs text-rose-700/90 dark:text-rose-300/90">
-                Overdue items are escalated automatically by the server-side SLA worker. The countdown here is
+                Overdue items are escalated automatically by the server-side SLA worker. Countdown is
                 display-only.
               </p>
             </div>
@@ -218,7 +271,8 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      {/* 7 Core Database-Backed Metric KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
         <StatCard
           label="Total Complaints"
           value={formatNumber(kpis.total)}
@@ -226,6 +280,7 @@ function DashboardView({
           tone="cyan"
           isDemo={isDemo}
           trend={trends.total}
+          hint="All registered complaints"
         />
         <StatCard
           label="Newly Assigned"
@@ -241,6 +296,7 @@ function DashboardView({
           icon={<Loader className="h-5 w-5" aria-hidden="true" />}
           tone="slate"
           isDemo={isDemo}
+          hint="Field work underway"
         />
         <StatCard
           label="Pending / Escalated"
@@ -251,12 +307,21 @@ function DashboardView({
           hint="Overdue or escalated"
         />
         <StatCard
-          label="Resolved"
-          value={formatNumber(kpis.resolved)}
+          label="Completed"
+          value={formatNumber(kpis.completed || kpis.resolved)}
           icon={<CheckCircle2 className="h-5 w-5" aria-hidden="true" />}
           tone="emerald"
           isDemo={isDemo}
           trend={trends.resolved}
+          hint="Resolved or closed"
+        />
+        <StatCard
+          label="SLA Breaches"
+          value={formatNumber(kpis.slaBreaches || overdue.length)}
+          icon={<AlertTriangle className="h-5 w-5" aria-hidden="true" />}
+          tone="rose"
+          isDemo={isDemo}
+          hint={`Exceeding ${slaMinutes}-min SLA`}
         />
         <StatCard
           label="SLA Compliance"
@@ -267,10 +332,11 @@ function DashboardView({
           hint={
             kpis.resolvedTotal > 0
               ? `Resolved within SLA ÷ ${kpis.resolvedTotal} resolved`
-              : 'No resolved complaints yet'
+              : 'No resolved tickets yet'
           }
         />
       </div>
+
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="card p-4">
