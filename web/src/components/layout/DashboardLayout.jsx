@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import DemoBanner from '../common/DemoBanner';
 import ErrorBoundary from '../common/ErrorBoundary';
 import AIAssistant from '../assistant/AIAssistant';
+import AnimatedWallpaper from '../common/AnimatedWallpaper';
 
 const SIDEBAR_KEY = 'avenqra_sidebar_collapsed';
 
@@ -51,7 +52,8 @@ export default function DashboardLayout() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-navy-950">
+    <div className="relative flex min-h-screen bg-slate-50/70 dark:bg-navy-950/85 overflow-x-hidden">
+      <AnimatedWallpaper />
       <Sidebar
         collapsed={collapsed}
         onToggleCollapse={toggleCollapse}
@@ -59,7 +61,7 @@ export default function DashboardLayout() {
         onCloseMobile={() => setMobileOpen(false)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <DemoBanner />
         <Header onOpenMobile={() => setMobileOpen(true)} />
 

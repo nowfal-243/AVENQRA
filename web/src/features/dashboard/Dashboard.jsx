@@ -269,7 +269,8 @@ function DashboardView({
   }, [recentActivity, feedFilter]);
 
   const timeString = useMemo(() => {
-    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateObj = typeof now === 'number' ? new Date(now) : (now instanceof Date ? now : new Date());
+    return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, [now]);
 
   return (
