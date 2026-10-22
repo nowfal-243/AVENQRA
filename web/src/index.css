@@ -78,26 +78,30 @@
 }
 
 @layer components {
-  /* ----- Surfaces ----- */
+  /* ----- Surfaces & Glassmorphism ----- */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-navy-900 dark:shadow-none;
+    @apply relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 shadow-card transition-all duration-200 backdrop-blur-md dark:border-slate-800/80 dark:bg-navy-900/90 dark:shadow-none;
   }
 
   .card-hover {
-    @apply transition-all duration-150 hover:border-slate-300 hover:shadow-card-hover dark:hover:border-slate-700;
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-card-hover dark:hover:border-cyan-500/30 dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.35)];
+  }
+
+  .glass-card {
+    @apply relative overflow-hidden rounded-2xl border border-white/40 bg-white/80 backdrop-blur-xl shadow-card dark:border-white/[0.07] dark:bg-navy-900/80 dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
   }
 
   .panel-title {
-    @apply text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100;
+    @apply text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2;
   }
 
   .panel-subtitle {
-    @apply mt-0.5 text-xs text-slate-500 dark:text-slate-400;
+    @apply mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed;
   }
 
   /* ----- Buttons ----- */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold leading-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60 disabled:pointer-events-none disabled:opacity-50 active:translate-y-px;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold leading-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98];
   }
 
   .btn-primary {

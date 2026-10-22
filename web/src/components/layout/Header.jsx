@@ -117,8 +117,8 @@ export default function Header({ onOpenMobile }) {
     }
   };
 
-  const healthDot = health === null ? 'bg-amber-400 animate-pulse' : health.ok ? 'bg-emerald-500' : 'bg-rose-500';
-  const healthLabel = health === null ? 'Checking…' : health.ok ? `API ${health.latencyMs}ms` : 'API offline';
+  const healthDot = health === null ? 'bg-amber-400 animate-pulse' : health.ok ? 'bg-emerald-500' : (isDemo ? 'bg-violet-400' : 'bg-rose-500');
+  const healthLabel = health === null ? 'Checking…' : health.ok ? `Live API · ${health.latencyMs}ms` : (isDemo ? 'Demo Mode' : 'API Offline');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur-md dark:border-slate-800 dark:bg-navy-900/85">
