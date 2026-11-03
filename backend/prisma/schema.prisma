@@ -3,34 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // Supabase requires the direct (non-pooled, port 5432) connection for
-  // migrations, while the pooled PgBouncer URL (port 6543) is best at runtime.
-  directUrl = env("DIRECT_URL")
-}
-
-enum Role {
-  CITIZEN
-  OFFICER
-  DEPARTMENT_ADMIN
-  SUPER_ADMIN
-}
-
-enum ComplaintStatus {
-  SUBMITTED
-  ASSIGNED
-  IN_PROGRESS
-  ESCALATED
-  RESOLVED
-  REJECTED
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -39,7 +13,7 @@ model User {
   email            String            @unique
   password         String
   phone            String?
-  role             Role              @default(CITIZEN)
+  role             String            @default("CITIZEN")
   avatarUrl        String?
   googleId         String?           @unique
   otpCode          String?
@@ -103,8 +77,8 @@ model Complaint {
   title            String
   description      String
   category         String
-  currentStatus    ComplaintStatus   @default(SUBMITTED)
-  priority         Priority          @default(MEDIUM)
+  currentStatus    String            @default("SUBMITTED")
+  priority         String            @default("MEDIUM")
   isEscalated      Boolean           @default(false)
   escalatedAt      DateTime?
   images           ComplaintImage[]
@@ -157,7 +131,7 @@ model ComplaintStatusLog {
   id               String            @id @default(uuid())
   complaintId      String
   complaint        Complaint         @relation(fields: [complaintId], references: [id], onDelete: Cascade)
-  status           ComplaintStatus
+  status           String            @default("SUBMITTED")
   remarks          String?
   updatedById      String?
   updatedBy        User?             @relation(fields: [updatedById], references: [id])

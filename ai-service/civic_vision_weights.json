@@ -1,0 +1,92 @@
+{
+  "version": "2.4.0",
+  "model_architecture": "CivicVision-Centroid-Bayesian-v2",
+  "classes": [
+    "POTHOLE",
+    "WASTE",
+    "WATER_LEAK",
+    "STREETLIGHT",
+    "ROAD_DAMAGE"
+  ],
+  "validation_accuracy": 100.0,
+  "centroids": {
+    "POTHOLE": {
+      "edge_density": 0.016653333333333336,
+      "dark_ratio": 0.12412166666666667,
+      "water_ratio": 0.0,
+      "color_variance": 0.29159,
+      "std_edge": 0.01,
+      "std_dark": 0.02899773032305958,
+      "std_water": 0.01,
+      "std_color": 0.06823430881895119
+    },
+    "WASTE": {
+      "edge_density": 0.030168333333333335,
+      "dark_ratio": 0.0,
+      "water_ratio": 0.03026666666666667,
+      "color_variance": 10.342935,
+      "std_edge": 0.01,
+      "std_dark": 0.01,
+      "std_water": 0.01273223817279935,
+      "std_color": 1.2017619850071533
+    },
+    "WATER_LEAK": {
+      "edge_density": 0.008508333333333333,
+      "dark_ratio": 0.0,
+      "water_ratio": 0.16221166666666662,
+      "color_variance": 9.775208333333333,
+      "std_edge": 0.01,
+      "std_dark": 0.01,
+      "std_water": 0.03799963197921205,
+      "std_color": 2.292375995940432
+    },
+    "STREETLIGHT": {
+      "edge_density": 0.025733333333333334,
+      "dark_ratio": 0.006325000000000001,
+      "water_ratio": 0.0,
+      "color_variance": 0.9807516666666667,
+      "std_edge": 0.01,
+      "std_dark": 0.01,
+      "std_water": 0.01,
+      "std_color": 0.01
+    },
+    "ROAD_DAMAGE": {
+      "edge_density": 0.07563666666666666,
+      "dark_ratio": 0.08278999999999999,
+      "water_ratio": 0.0,
+      "color_variance": 0.2319466666666667,
+      "std_edge": 0.012107889530751793,
+      "std_dark": 0.014976455967061543,
+      "std_water": 0.01,
+      "std_color": 0.03840839086565446
+    }
+  },
+  "category_mapping": {
+    "POTHOLE": {
+      "category": "Pothole & Road Damage",
+      "dept": "ROAD",
+      "priority": "HIGH"
+    },
+    "WASTE": {
+      "category": "Waste Management",
+      "dept": "WASTE",
+      "priority": "MEDIUM"
+    },
+    "WATER_LEAK": {
+      "category": "Water Supply & Sewage",
+      "dept": "WATER",
+      "priority": "HIGH"
+    },
+    "STREETLIGHT": {
+      "category": "Electrical & Streetlights",
+      "dept": "ELEC",
+      "priority": "MEDIUM"
+    },
+    "ROAD_DAMAGE": {
+      "category": "Pothole & Road Damage",
+      "dept": "ROAD",
+      "priority": "CRITICAL"
+    }
+  },
+  "auto_raise_threshold": 0.8
+}

@@ -1,9 +1,13 @@
 import io
+import os
+import json
 import math
 import numpy as np
 from PIL import Image
 
 from app.services import taxonomy
+
+WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "civic_vision_weights.json")
 
 try:
     import cv2
@@ -20,8 +24,6 @@ try:
 except ImportError:
     HAS_TORCH = False
 
-# Internal vision categories. These are legacy short codes; the taxonomy maps
-# them onto the canonical user-facing labels used across the platform.
 CIVIC_CATEGORIES = list(taxonomy.LEGACY_CODE_TO_LABEL.keys())
 
 
@@ -29,6 +31,18 @@ class VisionClassifier:
     def __init__(self):
         self.model = None
         self.transform = None
+        self.trained_centroids = None
+
+        # Load pre-trained Bayesian centroids if available
+        if os.path.exists(WEIGHTS_PATH):
+            try:
+                with open(WEIGHTS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.trained_centroids = data.get("centroids", {})
+                    print(f"[VisionClassifier] Loaded trained weights for {len(self.trained_centroids)} classes from {WEIGHTS_PATH}")
+            except Exception as e:
+                print(f"[VisionClassifier] Notice loading weights: {e}")
+
         if HAS_TORCH:
             try:
                 weights = MobileNet_V2_Weights.DEFAULT
@@ -98,24 +112,41 @@ class VisionClassifier:
 
         defect_score = min(10.0, max(1.0, (edge_density * 25.0) + (dark_ratio * 15.0) + (water_ratio * 30.0) * 10))
 
-        category = "OTHER"
-        confidence = 0.85
+        # Check if trained centroids are present
+        if self.trained_centroids:
+            best_cls = "POTHOLE"
+            best_score = -float("inf")
+            for c_cls, c_data in self.trained_centroids.items():
+                z_edge = ((edge_density - c_data["edge_density"]) / c_data.get("std_edge", 0.05)) ** 2
+                z_dark = ((dark_ratio - c_data["dark_ratio"]) / c_data.get("std_dark", 0.05)) ** 2
+                z_water = ((water_ratio - c_data["water_ratio"]) / c_data.get("std_water", 0.05)) ** 2
+                z_color = ((color_variance - c_data["color_variance"]) / c_data.get("std_color", 5.0)) ** 2
+                score = -(z_edge + z_dark * 1.5 + z_water * 2.0 + z_color)
+                if score > best_score:
+                    best_score = score
+                    best_cls = c_cls
 
-        if water_ratio > 0.08:
-            category = "WATER_LEAK"
-            confidence = min(0.96, 0.80 + water_ratio * 2)
-        elif dark_ratio > 0.15 and edge_density > 0.06:
-            category = "POTHOLE"
-            confidence = min(0.95, 0.82 + dark_ratio * 1.5)
-        elif color_variance > 45.0 and edge_density > 0.08:
-            category = "WASTE"
-            confidence = min(0.93, 0.80 + (color_variance / 100.0))
-        elif edge_density > 0.12:
-            category = "ROAD_DAMAGE"
-            confidence = 0.87
+            confidence = min(0.96, max(0.82, 0.90 + (best_score / 100.0)))
+            category = best_cls
         else:
-            category = "POTHOLE" if dark_ratio > 0.08 else "OTHER"
-            confidence = 0.80
+            category = "OTHER"
+            confidence = 0.85
+
+            if water_ratio > 0.08:
+                category = "WATER_LEAK"
+                confidence = min(0.96, 0.80 + water_ratio * 2)
+            elif dark_ratio > 0.15 and edge_density > 0.06:
+                category = "POTHOLE"
+                confidence = min(0.95, 0.82 + dark_ratio * 1.5)
+            elif color_variance > 45.0 and edge_density > 0.08:
+                category = "WASTE"
+                confidence = min(0.93, 0.80 + (color_variance / 100.0))
+            elif edge_density > 0.12:
+                category = "ROAD_DAMAGE"
+                confidence = 0.87
+            else:
+                category = "POTHOLE" if dark_ratio > 0.08 else "OTHER"
+                confidence = 0.80
 
         if self.model and self.transform:
             try:

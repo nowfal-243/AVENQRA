@@ -1,21 +1,19 @@
 /**
- * Prisma client — points at Supabase Postgres (see DATABASE_URL in .env).
- *
- * DATABASE_URL should be the Supabase pooled connection (port 6543)
- * for runtime; DIRECT_URL is the direct connection (port 5432) used
- * by `prisma migrate`.
+ * Prisma client — connects to persistent database (SQLite file:./dev.db or Supabase Postgres).
  */
 
 const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const path = require('path');
 
 const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
 });
 
-function withTimeout(promise, ms = 2000, label = 'DB query') {
+function withTimeout(promise, ms = 5000, label = 'DB query') {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms (DB unreachable?)`)), ms);
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
   });
   return Promise.race([Promise.resolve(promise).finally(() => clearTimeout(timer)), timeout]);
 }
@@ -26,10 +24,13 @@ function parseHostPort(url) {
 }
 
 function isDbReachable(timeoutMs = 1500) {
+  const src = process.env.DATABASE_URL || '';
+  if (src.startsWith('file:')) {
+    return Promise.resolve(true);
+  }
   const net = require('net');
   return new Promise((resolve) => {
     try {
-      const src = process.env.DATABASE_URL || process.env.DIRECT_URL || '';
       const hp = parseHostPort(src);
       const sock = new net.Socket();
       let done = false;
